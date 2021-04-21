@@ -1,14 +1,13 @@
 const LcrptToken = artifacts.require('./LcrptToken');
 const LcrptTokenSale = artifacts.require('./LcrptTokenSale');
 
-contract('LcrptTokenSale', (accounts) => {
-  let token;
-  let saleToken;
+contract('LcrptTokenSale', async (accounts) => {
+  let token, saleToken;
   const tokenPrice = 1000000000000000; // in wei
   const admin = accounts[0];
   const buyer = accounts[1];
   const numberOfTokens = 10;
-  const tokensAvailbale = 750000;
+  const tokensAvailable = 750000;
 
   before(async () => {
     token = await LcrptToken.deployed();
@@ -17,6 +16,8 @@ contract('LcrptTokenSale', (accounts) => {
 
   describe('Init Token', async () => {
     it('Initilizes contracts with the correct values', async () => {
+      const token = await LcrptToken.deployed();
+      const saleToken = await LcrptTokenSale.deployed();
       const address = await saleToken.address;
       const contract = await saleToken.tokenContract();
       const price = await saleToken.tokenPrice();
@@ -28,19 +29,33 @@ contract('LcrptTokenSale', (accounts) => {
   });
 
   describe('buyTokens', async () => {
-    it('Should increments the number of tokens', async () => {
+    it('Should buy the good amount of tokens', async () => {
+      await token.transfer(saleToken.address, tokensAvailable, { from: admin });
+
+      // should buy good amount of token
+      await saleToken.buyTokens(numberOfTokens, {
+        from: buyer,
+        value: numberOfTokens * tokenPrice,
+      });
+
+      const buyerBalance = await token.balanceOf(buyer);
+      const balance = await token.balanceOf(saleToken.address);
+
+      assert.equal(buyerBalance.toNumber(), numberOfTokens);
+      assert.equal(balance.toNumber(), tokensAvailable - numberOfTokens);
+
+      // Should increments the number of tokens
       await saleToken.buyTokens(numberOfTokens, {
         from: buyer,
         value: numberOfTokens * tokenPrice,
       });
 
       const amount = await saleToken.tokensSold();
-      console.log('AMOUNT', amount)
 
-      assert.equal(amount.toNumber(), numberOfTokens, 'increments the number of tokens');
-    });
+      // to fix: x2 because there is two buyToken action called in that function
+      assert.equal(amount.toNumber(), numberOfTokens * 2, 'increments the number of tokens');
 
-    it('Should emit Sell event', async () => {
+      // Should emit Sell event
       const receipt = await saleToken.buyTokens(numberOfTokens, {
         from: buyer,
         value: numberOfTokens * tokenPrice,
@@ -50,62 +65,39 @@ contract('LcrptTokenSale', (accounts) => {
       assert.equal(receipt.logs[0].event, 'Sell');
       assert.equal(receipt.logs[0].args._buyer, buyer, 'Log the account that purchased the tokens');
       assert.equal(receipt.logs[0].args._amount, numberOfTokens, 'log the amount of tokens that have been purchased');
-    });
 
-    it('Should require the same amount of tokens', async () => {
+      // Should require the same amount of tokens
       await saleToken.buyTokens(numberOfTokens, {
         from: buyer,
         value: 1,
       }).then(assert.fail).catch(err => {
         assert(err.message.indexOf('revert') >= 0, 'msg.value must equal number of tokens in wei');
       });
-    });
 
-    it('Should not be able to purchase more tokens than available in the total supply', async () => {
+      // Should not be able to purchase more tokens than available in the total supply
       await saleToken.buyTokens(800000, {
         from: admin,
         value: numberOfTokens * tokenPrice,
       }).then(assert.fail).catch(err => {
         assert(err.message.indexOf('revert') >= 0, 'cannot purchase more tokens than available');
-      });;
+      });
+    });
+  });
+
+  describe('endSale', async () => {
+    it('Should end sale only by admin', async () => {
+      return saleToken.endSale({ from: buyer }).then(assert.fail).catch(err => {
+        assert(err.message.indexOf('revert') >= 0, 'Must be an admin to end sale');
+      });
     });
 
-    it('Should buy the good amount of tokens', async () => {
-      await saleToken.buyTokens(numberOfTokens, {
-        from: buyer,
-        value: numberOfTokens * tokenPrice,
-      });
+    it('Should end sale only by admin', async () => {
+      await saleToken.endSale({ from: admin });
 
-      const buyerBalance = await token.balanceOf(buyer);
-      const balance = await token.balanceOf(saleToken.address);
+      const balance = await token.balanceOf(admin);
 
-      assert.equal(buyerBalance.toNumber(), tokensAvailbale - numberOfTokens);
-      assert.equal(balance.toNumber(), tokensAvailbale - numberOfTokens);
+      // to fix: buyer bought 3 times 10 tokens in the last
+      assert.equal(balance.toNumber(), 999970, 'returns all unsold tokens to admin');
     });
   });
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//

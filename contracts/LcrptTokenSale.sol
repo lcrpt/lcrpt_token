@@ -22,11 +22,19 @@ contract LcrptTokenSale {
 
   function buyTokens(uint256 _numberOfTokens) public payable {
     require(msg.value == multiply(_numberOfTokens, tokenPrice));
-    require(tokenContract.balanceOf(admin) >= _numberOfTokens);
+    require(tokenContract.balanceOf(this) >= _numberOfTokens);
     require(tokenContract.transfer(msg.sender, _numberOfTokens));
 
     tokensSold += _numberOfTokens;
 
     emit Sell(msg.sender, _numberOfTokens);
+  }
+
+  function endSale() public {
+    require(msg.sender == admin);
+    // transfer remaining tokens to admin
+    require(tokenContract.transfer(admin, tokenContract.balanceOf(this)));
+    // transfer the balance to the admin
+    admin.transfer(address(this).balance);
   }
 }
